@@ -19,8 +19,37 @@ def input_splitter(text: str) -> list[bytes]:
     return states
 
 
-def key_expansion():
-    pass
+def key_expansion(key: list[int], Nr: int, Nk: int) -> list[list[int]]:
+    """
+    Creates multiple round keys from the main key
+    """
+    round_keys = [key[4*i:4*i + 4] for i in range(Nk)]
+
+    print(round_keys)
+
+    for i in range(Nk, 4*(Nr + 1)):
+        temp = round_keys[i-1]
+        print(f'i={i}; temp={[hex(x) for x in temp]}', end='\n\t')
+
+        if i % Nk == 0:
+            # rotate to left
+            temp.append(temp.pop(0))
+            print(f'i={i}; temp={[hex(x) for x in temp]}', end='\n\t')
+
+            # substitute each byte
+            temp = [SBOX[byte] for byte in temp]
+            print(f'temp={[hex(x) for x in temp]}', end='\n\t')
+
+            # xor with rcon
+            temp[0] ^= RCON[i//Nk - 1]
+            print(f'temp={[hex(x) for x in temp]}')
+
+        elif Nk > 6 and i % Nk == 4:
+            temp = [SBOX[byte] for byte in temp]
+
+        round_keys.append([round_keys[i - Nk][j] ^ temp[j] for j in range(4)])
+
+    return round_keys
 
 
 def state_initializer():
@@ -63,8 +92,10 @@ AES_128 = (Nk[0], Nb, Nr[0])
 AES_192 = (Nk[1], Nb, Nr[1])
 AES_256 = (Nk[2], Nb, Nr[2])
 
-
-mx = '00011011'  # m(x) = x^8 + x^4 + x^3 + x + 1
+RCON = (
+    0x00, 0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40,
+    0x80, 0x1B, 0x36, 0x6C, 0xD8, 0xAB, 0x4D
+)
 
 SBOX = (
     0x63, 0x7C, 0x77, 0x7B, 0xF2, 0x6B, 0x6F, 0xC5, 0x30, 0x01, 0x67, 0x2B, 0xFE, 0xD7, 0xAB, 0x76,
@@ -87,6 +118,7 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    print(input_splitter("Ana are mereeeee multe si carnoa"))
+    print([[hex(x) for x in key] for key in key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f,
+                         0x3c], Nr[0], Nk[0])])
 
 

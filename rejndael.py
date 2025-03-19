@@ -1,5 +1,24 @@
 # ---------------Input---------------
 
+def input_splitter(text: str) -> list[bytes]:
+    """
+    Converts text to bytes \n
+    Splits into 16-byte blocks \n
+    Pad the last block using PKCS#7 if necessary
+    """
+    # convert text to bytes
+    byte_data = text.encode()
+
+    # add padding
+    padding = 16 - len(text) % 16
+    byte_data += bytes([padding] * padding)
+
+    # split into states
+    states = [byte_data[i:i+16] for i in range(0, len(byte_data), 16)]
+
+    return states
+
+
 def key_expansion():
     pass
 
@@ -68,8 +87,6 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    state = [0x16, 0xa2, 0x3, 0x4]
-    sub_bytes(state)
-    print([hex(x) for x in state])
+    print(input_splitter("Ana are mereeeee multe si carnoa"))
 
 

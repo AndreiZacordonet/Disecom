@@ -1,17 +1,17 @@
 # ---------------Input---------------
 
-def input_splitter(text: str) -> list[bytes]:
+def input_splitter(text: str) -> list[bytearray]:
     """
     Converts text to bytes \n
     Splits into 16-byte blocks \n
     Pad the last block using PKCS#7 if necessary
     """
     # convert text to bytes
-    byte_data = text.encode()
+    byte_data = bytearray(text.encode())
 
     # add padding
     padding = 16 - len(text) % 16
-    byte_data += bytes([padding] * padding)
+    byte_data += bytearray([padding] * padding)
 
     # split into states
     states = [byte_data[i:i+16] for i in range(0, len(byte_data), 16)]
@@ -25,33 +25,33 @@ def key_expansion(key: list[int], Nr: int, Nk: int) -> list[list[int]]:
     """
     round_keys = [key[4*i:4*i + 4] for i in range(Nk)]
 
-    print(round_keys)
+    # print(round_keys)
 
     for i in range(Nk, 4 * (Nr + 1)):
-        print(f"round {i}")
+        # print(f"round {i}")
         temp = round_keys[i-1][:]
-        print_hex(temp)
+        # print_hex(temp)
 
         if i % Nk == 0:
             # rotate to left
             temp.append(temp.pop(0))
-            print_hex(temp, "after rotation")
+            # print_hex(temp, "after rotation")
 
             # substitute each byte
             temp = [SBOX[byte] for byte in temp]
-            print_hex(temp, "after subbyte")
+            # print_hex(temp, "after subbyte")
 
             # xor with rcon
             temp[0] ^= RCON[i//Nk - 1]
-            print_hex(temp, "alter rcon")
+            # print_hex(temp, "alter rcon")
 
         elif Nk > 6 and i % Nk == 4:
             temp = [SBOX[byte] for byte in temp]
 
-        print_hex(round_keys[i - Nk], "w[i − Nk]")
+        # print_hex(round_keys[i - Nk], "w[i − Nk]")
         round_keys.append([round_keys[i - Nk][j] ^ temp[j] for j in range(4)])
 
-        print_hex(round_keys[-1], "round key")
+        # print_hex(round_keys[-1], "round key")
 
     return round_keys
 
@@ -69,15 +69,23 @@ def state_initializer():
 
 # ---------------Transformations---------------
 
-def sub_bytes(state: list):
+def sub_bytes(state: bytearray):
     """Applies a substitution table (S-box) to each byte"""
 
     for i in range(len(state)):
         state[i] = SBOX[state[i]]
 
 
-def shift_rows():
-    pass
+def shift_rows(state: bytearray):
+    """Shifts each byte by its row index value"""
+
+    for row_index in range(0, len(state), 4):
+        row = state[row_index:row_index + 4]
+
+        for _ in range(row_index // 4):
+            row.append(row.pop(0))
+
+        state[row_index:row_index + 4] = row
 
 
 def mix_columns():
@@ -129,14 +137,26 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    print([[hex(x) for x in key] for key in key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab,
-                                                           0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])])
+    states = input_splitter("Ana are mere multe si frumoase s")
+    print(states)
 
-    print([[hex(x) for x in key] for key in key_expansion([0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52, 0xc8,
-                                                           0x10, 0xf3, 0x2b, 0x80, 0x90, 0x79, 0xe5, 0x62, 0xf8, 0xea,
-                                                           0xd2, 0x52, 0x2c, 0x6b, 0x7b], Nr[1], Nk[1])])
+    for i in range(len(states)):
+        sub_bytes(states[i])
+    print(states[:])
 
-    print([[hex(x) for x in key] for key in key_expansion([0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b,
-                                                           0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c,
-                                                           0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09,
-                                                           0x14, 0xdf, 0xf4], Nr[2], Nk[2])])
+    for i in range(len(states)):
+        shift_rows(states[i])
+    print(states[:])
+
+    # Test key expansion
+    # print([[hex(x) for x in key] for key in key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab,
+    #                                                        0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])])
+    #
+    # print([[hex(x) for x in key] for key in key_expansion([0x8e, 0x73, 0xb0, 0xf7, 0xda, 0x0e, 0x64, 0x52, 0xc8,
+    #                                                        0x10, 0xf3, 0x2b, 0x80, 0x90, 0x79, 0xe5, 0x62, 0xf8, 0xea,
+    #                                                        0xd2, 0x52, 0x2c, 0x6b, 0x7b], Nr[1], Nk[1])])
+    #
+    # print([[hex(x) for x in key] for key in key_expansion([0x60, 0x3d, 0xeb, 0x10, 0x15, 0xca, 0x71, 0xbe, 0x2b,
+    #                                                        0x73, 0xae, 0xf0, 0x85, 0x7d, 0x77, 0x81, 0x1f, 0x35, 0x2c,
+    #                                                        0x07, 0x3b, 0x61, 0x08, 0xd7, 0x2d, 0x98, 0x10, 0xa3, 0x09,
+    #                                                        0x14, 0xdf, 0xf4], Nr[2], Nk[2])])

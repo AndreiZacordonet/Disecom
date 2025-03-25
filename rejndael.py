@@ -1,3 +1,26 @@
+# ---------------Utils---------------
+
+def print_hex(thing: list[int], name="thing"):
+    print(f"{name}: ", end="")
+    for number in thing:
+        print(hex(number), end=", ")
+    print()
+
+
+def x_times(byte: int) -> int:
+    return ((byte << 1) ^ 0x1b if byte & 0x80 else byte << 1) & 0xff
+
+
+def mul_2(byte: int) -> int:
+    """Multiply a number with 2 in Galois Field"""
+    return x_times(byte)
+
+
+def mul_3(byte: int) -> int:
+    """Multiply a number with 3 in Galois Field"""
+    return byte ^ x_times(byte)
+
+
 # ---------------Input---------------
 
 def input_splitter(text: str) -> list[bytearray]:
@@ -56,13 +79,6 @@ def key_expansion(key: list[int], Nr: int, Nk: int) -> list[list[int]]:
     return round_keys
 
 
-def print_hex(thing: list[int], name="thing"):
-    print(f"{name}: ", end="")
-    for number in thing:
-        print(hex(number), end=", ")
-    print()
-
-
 def state_initializer():
     pass
 
@@ -88,8 +104,18 @@ def shift_rows(state: bytearray):
         state[row_index:row_index + 4] = row
 
 
-def mix_columns():
-    pass
+def mix_columns(state: bytearray):
+    """Multiply each column with a fixed matrix"""
+    for i in range(4):
+        a = state[i]  # s0
+        b = state[i + 4]  # s1
+        c = state[i + 8]  # s2
+        d = state[i + 12]  # s3
+
+        state[i] = mul_2(a) ^ mul_3(b) ^ c ^ d
+        state[i + 4] = mul_2(b) ^ mul_3(c) ^ d ^ a
+        state[i + 8] = mul_2(c) ^ mul_3(d) ^ a ^ b
+        state[i + 12] = mul_2(d) ^ mul_3(a) ^ b ^ c
 
 
 def add_round_key():
@@ -137,16 +163,25 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    states = input_splitter("Ana are mere multe si frumoase s")
-    print(states)
+    state = bytearray([0xd4, 0xe0, 0xb8, 0x1e,
+                       0xbf, 0xb4, 0x41, 0x27,
+                       0x5d, 0x52, 0x11, 0x98,
+                       0x30, 0xae, 0xf1, 0xe5])
+    mix_columns(state)
 
-    for i in range(len(states)):
-        sub_bytes(states[i])
-    print(states[:])
+    print(state)
 
-    for i in range(len(states)):
-        shift_rows(states[i])
-    print(states[:])
+    # Test sub bytes and shift rows
+    # states = input_splitter("Ana are mere multe si frumoase s")
+    # print(states)
+    #
+    # for i in range(len(states)):
+    #     sub_bytes(states[i])
+    # print(states[:])
+    #
+    # for i in range(len(states)):
+    #     shift_rows(states[i])
+    # print(states[:])
 
     # Test key expansion
     # print([[hex(x) for x in key] for key in key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab,

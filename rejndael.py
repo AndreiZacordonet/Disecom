@@ -7,6 +7,16 @@ def print_hex(thing: list[int], name="thing"):
     print()
 
 
+def print_hex2(thing: list[int], name="thing"):
+    """Prints a 16-byte state in AES column-major order."""
+    print(f"{name}:")
+    for row in range(4):
+        for col in range(4):
+            print(f"{hex(thing[col * 4 + row])}".rjust(6), end=" ")
+        print()  # Newline after each row
+    print()
+
+
 def x_times(byte: int) -> int:
     return ((byte << 1) ^ 0x1b if byte & 0x80 else byte << 1) & 0xff
 
@@ -37,7 +47,14 @@ def input_splitter(text: str) -> list[bytearray]:
     byte_data += bytearray([padding] * padding)
 
     # split into states
-    states = [byte_data[i:i+16] for i in range(0, len(byte_data), 16)]
+    # states = [byte_data[i:i+16] for i in range(0, len(byte_data), 16)]
+    states = [bytearray(16) for _ in range(len(byte_data) // 16)]
+
+    for i in range(len(byte_data)):
+        block_index = i // 16
+        row = i % 4
+        col = (i // 4) % 4
+        states[block_index][row * 4 + col] = byte_data[i]
 
     return states
 
@@ -133,23 +150,23 @@ def add_round_key(state: bytearray, round_key: list[list[int]]):    # 4 words (c
 
 def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
 
-    print_hex(state, "Initial state")
+    # print_hex(state, "Initial state")
 
     add_round_key(state, round_keys[:4])
-    print_hex(state, "First add round key")
+    # print_hex(state, "First add round key")
 
     for round in range(1, Nr):
         sub_bytes(state)
-        print_hex(state, f"After {round} sub bytes")
+        # print_hex(state, f"After {round} sub bytes")
 
         shift_rows(state)
-        print_hex(state, f"After {round} shift rows")
+        # print_hex(state, f"After {round} shift rows")
 
         mix_columns(state)
-        print_hex(state, f"After {round} mix columns")
+        # print_hex(state, f"After {round} mix columns")
 
         add_round_key(state, round_keys[4*round:4*(round+1)])
-        print_hex(state, f"After {round} add round key")
+        # print_hex(state, f"After {round} add round key")
 
     sub_bytes(state)
     shift_rows(state)
@@ -197,16 +214,19 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    state = bytearray([0x32, 0x88, 0x31, 0xe0,
-                       0x43, 0x5a, 0x31, 0x37,
-                       0xf6, 0x30, 0x98, 0x07,
-                       0xa8, 0x8d, 0xa2, 0x34])
+    # state = bytearray([0x32, 0x88, 0x31, 0xe0,
+    #                    0x43, 0x5a, 0x31, 0x37,
+    #                    0xf6, 0x30, 0x98, 0x07,
+    #                    0xa8, 0x8d, 0xa2, 0x34])
 
     round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
 
-    cypher(state, Nr[0], round_keys)
+    for state in input_splitter("Ana are mere moi"):
+        print_hex(state, "Before")
 
-    print(state)
+        cypher(state, Nr[0], round_keys)
+
+        print_hex(state, "After")
 
     # mix_columns(state)
     #

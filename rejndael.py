@@ -175,51 +175,29 @@ def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
 
 def aes(text: str, cypher_type: str, key: list[int]) -> bytearray:
     """Encrypts text using AES (128, 192, or 256)"""
-    match cypher_type:
-        case "aes_128":
-            if len(key) != 16:
-                raise ValueError(f"Key must have a length of 16 instead of {len(key)}")
 
-            round_keys = key_expansion(key, Nr[0], Nk[0])
+    aes_config = {
+        "aes_128": (16, Nr[0], Nk[0]),
+        "aes_192": (24, Nr[1], Nk[1]),
+        "aes_256": (32, Nr[2], Nk[2]),
+    }
 
-            encrypted_bytes = bytearray()
+    if cypher_type not in aes_config:
+        raise ValueError("cypher_type must be 'aes_128', 'aes_192', or 'aes_256'")
 
-            for state in input_splitter(text):
-                cypher(state, Nr[0], round_keys)
-                encrypted_bytes.extend(state)
+    key_size, num_rounds, num_words = aes_config[cypher_type]
 
-            return encrypted_bytes
+    if len(key) != key_size:
+        raise ValueError(f"Key must be {key_size} bytes, but got {len(key)} bytes")
 
-        case "aes_192":
-            if len(key) != 24:
-                raise ValueError(f"Key must have a length of 24 instead of {len(key)}")
+    round_keys = key_expansion(key, num_rounds, num_words)
 
-            round_keys = key_expansion(key, Nr[1], Nk[1])
+    encrypted_bytes = bytearray()
+    for state in input_splitter(text):
+        cypher(state, num_rounds, round_keys)
+        encrypted_bytes.extend(state)
 
-            encrypted_bytes = bytearray()
-
-            for state in input_splitter(text):
-                cypher(state, Nr[1], round_keys)
-                encrypted_bytes.extend(state)
-
-            return encrypted_bytes
-
-        case "aes_256":
-            if len(key) != 32:
-                raise ValueError(f"Key must have a length of 32 instead of {len(key)}")
-
-            round_keys = key_expansion(key, Nr[2], Nk[2])
-
-            encrypted_bytes = bytearray()
-
-            for state in input_splitter(text):
-                cypher(state, Nr[2], round_keys)
-                encrypted_bytes.extend(state)
-
-            return encrypted_bytes
-
-        case _:
-            raise ValueError("type param must be 'aes_128', 'aes_192' or 'aes_256'")
+    return encrypted_bytes
 
 
 

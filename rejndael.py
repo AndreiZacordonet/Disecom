@@ -107,10 +107,10 @@ def shift_rows(state: bytearray):
 def mix_columns(state: bytearray):
     """Multiply each column with a fixed matrix"""
     for i in range(4):
-        a = state[i]  # s0
-        b = state[i + 4]  # s1
-        c = state[i + 8]  # s2
-        d = state[i + 12]  # s3
+        a = state[i]
+        b = state[i + 4]
+        c = state[i + 8]
+        d = state[i + 12]
 
         state[i] = mul_2(a) ^ mul_3(b) ^ c ^ d
         state[i + 4] = mul_2(b) ^ mul_3(c) ^ d ^ a
@@ -118,8 +118,42 @@ def mix_columns(state: bytearray):
         state[i + 12] = mul_2(d) ^ mul_3(a) ^ b ^ c
 
 
-def add_round_key():
-    pass
+def add_round_key(state: bytearray, round_key: list[list[int]]):    # 4 words (columns)
+    """Adds a round key to the state matrix\n
+    Round keys are previously generated from the main key"""
+
+    for i in range(4):
+        state[i] ^= round_key[i][0]
+        state[i + 4] ^= round_key[i][1]
+        state[i + 8] ^= round_key[i][2]
+        state[i + 12] ^= round_key[i][3]
+
+
+# ---------------AES---------------
+
+def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
+
+    print_hex(state, "Initial state")
+
+    add_round_key(state, round_keys[:4])
+    print_hex(state, "First add round key")
+
+    for round in range(1, Nr):
+        sub_bytes(state)
+        print_hex(state, f"After {round} sub bytes")
+
+        shift_rows(state)
+        print_hex(state, f"After {round} shift rows")
+
+        mix_columns(state)
+        print_hex(state, f"After {round} mix columns")
+
+        add_round_key(state, round_keys[4*round:4*(round+1)])
+        print_hex(state, f"After {round} add round key")
+
+    sub_bytes(state)
+    shift_rows(state)
+    add_round_key(state, round_keys[4*Nr:4*(Nr+1)])
 
 
 # ---------------Constants---------------
@@ -163,13 +197,20 @@ SBOX = (
 
 
 if __name__ == "__main__":
-    state = bytearray([0xd4, 0xe0, 0xb8, 0x1e,
-                       0xbf, 0xb4, 0x41, 0x27,
-                       0x5d, 0x52, 0x11, 0x98,
-                       0x30, 0xae, 0xf1, 0xe5])
-    mix_columns(state)
+    state = bytearray([0x32, 0x88, 0x31, 0xe0,
+                       0x43, 0x5a, 0x31, 0x37,
+                       0xf6, 0x30, 0x98, 0x07,
+                       0xa8, 0x8d, 0xa2, 0x34])
+
+    round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
+
+    cypher(state, Nr[0], round_keys)
 
     print(state)
+
+    # mix_columns(state)
+    #
+    # print(state)
 
     # Test sub bytes and shift rows
     # states = input_splitter("Ana are mere multe si frumoase s")

@@ -149,7 +149,7 @@ def add_round_key(state: bytearray, round_key: list[list[int]]):    # 4 words (c
 # ---------------AES---------------
 
 def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
-
+    """Encrypts a state matrix of the initial text"""
     # print_hex(state, "Initial state")
 
     add_round_key(state, round_keys[:4])
@@ -171,6 +171,56 @@ def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
     sub_bytes(state)
     shift_rows(state)
     add_round_key(state, round_keys[4*Nr:4*(Nr+1)])
+
+
+def aes(text: str, cypher_type: str, key: list[int]) -> bytearray:
+    """Encrypts text using AES (128, 192, or 256)"""
+    match cypher_type:
+        case "aes_128":
+            if len(key) != 16:
+                raise ValueError(f"Key must have a length of 16 instead of {len(key)}")
+
+            round_keys = key_expansion(key, Nr[0], Nk[0])
+
+            encrypted_bytes = bytearray()
+
+            for state in input_splitter(text):
+                cypher(state, Nr[0], round_keys)
+                encrypted_bytes.extend(state)
+
+            return encrypted_bytes
+
+        case "aes_192":
+            if len(key) != 24:
+                raise ValueError(f"Key must have a length of 24 instead of {len(key)}")
+
+            round_keys = key_expansion(key, Nr[1], Nk[1])
+
+            encrypted_bytes = bytearray()
+
+            for state in input_splitter(text):
+                cypher(state, Nr[1], round_keys)
+                encrypted_bytes.extend(state)
+
+            return encrypted_bytes
+
+        case "aes_256":
+            if len(key) != 32:
+                raise ValueError(f"Key must have a length of 32 instead of {len(key)}")
+
+            round_keys = key_expansion(key, Nr[2], Nk[2])
+
+            encrypted_bytes = bytearray()
+
+            for state in input_splitter(text):
+                cypher(state, Nr[2], round_keys)
+                encrypted_bytes.extend(state)
+
+            return encrypted_bytes
+
+        case _:
+            raise ValueError("type param must be 'aes_128', 'aes_192' or 'aes_256'")
+
 
 
 # ---------------Constants---------------

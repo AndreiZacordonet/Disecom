@@ -234,52 +234,56 @@ def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
 
 def inv_cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
     """Decrypts a state matrix of the encrypted text"""
-    # print_hex(state, "Initial state")
 
     add_round_key(state, round_keys[-4:])
-    # print_hex(state, "First add round key")
 
     for round in range(Nr-1, 0, -1):
         inv_shift_rows(state)
-        # print_hex(state, f"After {round} sub bytes")
 
         inv_sub_bytes(state)
-        # print_hex(state, f"After {round} shift rows")
 
         add_round_key(state, round_keys[4*round:4*(round+1)])
-        # print_hex(state, f"After {round} mix columns")
 
         inv_mix_columns(state)
-        # print_hex(state, f"After {round} add round key")
 
     inv_shift_rows(state)
     inv_sub_bytes(state)
     add_round_key(state, round_keys[:4])
 
 
-def aes(text: str, cypher_type: str, key: list[int]) -> bytearray:
-    """Encrypts text using AES (128, 192, or 256)"""
+def aes(text: str | bytearray, cypher_type: str, key: list[int], decrypt=False) -> str | bytearray:
+    """Encrypts and decrypts text using AES (128, 192, or 256)"""
 
-    aes_config = {
-        "aes_128": (16, Nr[0], Nk[0]),
-        "aes_192": (24, Nr[1], Nk[1]),
-        "aes_256": (32, Nr[2], Nk[2]),
-    }
+    if not decrypt and not isinstance(text, str):
+        raise ValueError("Text type must be 'str' when encrypting")
+
+    if decrypt:
+        if not isinstance(text, bytearray):
+            raise ValueError("Text type must be 'bytearray' when decrypting")
+
+        if len(text) % 16 != 0:
+            raise ValueError("Encrypted text must be a multiple of 16 bytes")
 
     if cypher_type not in aes_config:
         raise ValueError("cypher_type must be 'aes_128', 'aes_192', or 'aes_256'")
 
-    key_size, num_rounds, num_words = aes_config[cypher_type]
+    key_size, Nr, Nk = aes_config[cypher_type]
 
     if len(key) != key_size:
         raise ValueError(f"Key must be {key_size} bytes, but got {len(key)} bytes")
 
-    round_keys = key_expansion(key, num_rounds, num_words)
+    round_keys = key_expansion(key, Nr, Nk)
 
     encrypted_bytes = bytearray()
     for state in input_splitter(text):
-        cypher(state, num_rounds, round_keys)
-        encrypted_bytes.extend(state)
+        cypher(state, Nr, round_keys)
+
+        column_major_state = bytearray(16)
+        for col in range(4):
+            for row in range(4):
+                column_major_state[col * 4 + row] = state[row * 4 + col]
+
+        encrypted_bytes.extend(column_major_state)
 
     return encrypted_bytes
 
@@ -295,9 +299,11 @@ Nb = 4              # in bits (128)
 # number of rounds
 Nr = (10, 12, 14)
 
-AES_128 = (Nk[0], Nb, Nr[0])
-AES_192 = (Nk[1], Nb, Nr[1])
-AES_256 = (Nk[2], Nb, Nr[2])
+aes_config = {
+    "aes_128": (Nb*Nk[0], Nr[0], Nk[0]),
+    "aes_192": (Nb*Nk[1], Nr[1], Nk[1]),
+    "aes_256": (Nb*Nk[2], Nr[2], Nk[2]),
+}
 
 RCON = (
     0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40,

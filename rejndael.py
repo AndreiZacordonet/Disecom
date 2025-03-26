@@ -274,18 +274,36 @@ def aes(text: str | bytearray, cypher_type: str, key: list[int], decrypt=False) 
 
     round_keys = key_expansion(key, Nr, Nk)
 
-    encrypted_bytes = bytearray()
-    for state in input_splitter(text):
-        cypher(state, Nr, round_keys)
+    if decrypt:
+        decrypted_bytes = bytearray()
 
-        column_major_state = bytearray(16)
-        for col in range(4):
-            for row in range(4):
-                column_major_state[col * 4 + row] = state[row * 4 + col]
+        for i in range(0, len(text), 16):
+            state = text[i:i+16]
+            inv_cypher(state, Nr, round_keys)
 
-        encrypted_bytes.extend(column_major_state)
+            column_major_state = bytearray(16)
+            for col in range(4):
+                for row in range(4):
+                    column_major_state[col * 4 + row] = state[row * 4 + col]
 
-    return encrypted_bytes
+            decrypted_bytes.extend(column_major_state)
+
+        return decrypted_bytes[:-decrypted_bytes[-1]].decode("utf-8")
+
+    else:
+        encrypted_bytes = bytearray()
+        for state in input_splitter(text):
+            cypher(state, Nr, round_keys)
+
+            # This is for displaying the encrypted text
+            # column_major_state = bytearray(16)
+            # for col in range(4):
+            #     for row in range(4):
+            #         column_major_state[col * 4 + row] = state[row * 4 + col]
+
+            encrypted_bytes.extend(state)
+
+        return encrypted_bytes
 
 
 # ---------------Constants---------------
@@ -350,23 +368,45 @@ INV_SBOX = (
 
 
 if __name__ == "__main__":
-    pass
-    state = bytearray([0x32, 0x88, 0x31, 0xe0,
-                       0x43, 0x5a, 0x31, 0x37,
-                       0xf6, 0x30, 0x98, 0x07,
-                       0xa8, 0x8d, 0xa2, 0x34])
+    encrypted_text = aes("Ana are mere moi si mari!!\n si grosolane si \t cioboloase", "aes_128", [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c])
 
-    round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
+    print(encrypted_text)
 
-    print_hex(state, "Before")
+    decrypted_text = aes(encrypted_text, "aes_128", [0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], decrypt=True)
 
-    cypher(state, Nr[0], round_keys)
+    print(decrypted_text)
 
-    print_hex(state, "After")
+    # state = bytearray([0x32, 0x88, 0x31, 0xe0,
+    #                    0x43, 0x5a, 0x31, 0x37,
+    #                    0xf6, 0x30, 0x98, 0x07,
+    #                    0xa8, 0x8d, 0xa2, 0x34])
 
-    inv_cypher(state, Nr[0], round_keys)
-
-    print_hex(state, "After")
+    # states = input_splitter("Ana are mere moi si mari")
+    #
+    # round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
+    #
+    # for state in states:
+    #     print_hex(state, "Before enc")
+    #
+    #     cypher(state, Nr[0], round_keys)
+    #
+    #     print_hex(state, "After enc")
+    #
+    # for state in states:
+    #     print_hex(state, "Before dec")
+    #
+    #     inv_cypher(state, Nr[0], round_keys)
+    #
+    #     print_hex(state, "After dec")
+    #
+    #     column_major_state = state
+    #     state = bytearray(16)
+    #
+    #     for col in range(4):
+    #         for row in range(4):
+    #             state[row * 4 + col] = column_major_state[col * 4 + row]
+    #
+    #     print(state)
 
     # for state in input_splitter("Ana are mere moi"):
     #     print_hex(state, "Before")

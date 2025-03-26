@@ -31,6 +31,36 @@ def mul_3(byte: int) -> int:
     return byte ^ x_times(byte)
 
 
+def mul_4(byte: int) -> int:
+    """Multiply a number with 4 in Galois Field"""
+    return x_times(x_times(byte))
+
+
+def mul_8(byte: int) -> int:
+    """Multiply a number with 8 in Galois Field"""
+    return x_times(x_times(x_times(byte)))
+
+
+def mul_9(byte: int) -> int:
+    """Multiply a number with 9 in Galois Field"""
+    return byte ^ mul_8(byte)
+
+
+def mul_B(byte: int) -> int:
+    """Multiply a number with B in Galois Field"""
+    return mul_8(byte) ^ mul_2(byte) ^ byte
+
+
+def mul_D(byte: int) -> int:
+    """Multiply a number with D in Galois Field"""
+    return mul_8(byte) ^ mul_4(byte) ^ byte
+
+
+def mul_E(byte: int) -> int:
+    """Multiply a number with E in Galois Field"""
+    return mul_8(byte) ^ mul_4(byte) ^ mul_2(byte)
+
+
 # ---------------Input---------------
 
 def input_splitter(text: str) -> list[bytearray]:
@@ -150,6 +180,20 @@ def mix_columns(state: bytearray):
         state[i + 12] = mul_2(d) ^ mul_3(a) ^ b ^ c
 
 
+def inv_mix_columns(state: bytearray):
+    """Multiply each column with the inverse fixed matrix"""
+    for i in range(4):
+        a = state[i]
+        b = state[i + 4]
+        c = state[i + 8]
+        d = state[i + 12]
+
+        state[i] = mul_E(a) ^ mul_B(b) ^ mul_D(c) ^ mul_9(d)
+        state[i + 4] = mul_9(a) ^ mul_E(b) ^ mul_B(c) ^ mul_D(d)
+        state[i + 8] = mul_D(a) ^ mul_9(b) ^ mul_E(c) ^ mul_B(d)
+        state[i + 12] = mul_B(a) ^ mul_D(b) ^ mul_9(c) ^ mul_E(d)
+
+
 def add_round_key(state: bytearray, round_key: list[list[int]]):    # 4 words (columns)
     """Adds a round key to the state matrix\n
     Round keys are previously generated from the main key"""
@@ -186,6 +230,31 @@ def cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
     sub_bytes(state)
     shift_rows(state)
     add_round_key(state, round_keys[4*Nr:4*(Nr+1)])
+
+
+def inv_cypher(state: bytearray, Nr: int, round_keys: list[list[int]]):
+    """Decrypts a state matrix of the encrypted text"""
+    # print_hex(state, "Initial state")
+
+    add_round_key(state, round_keys[-4:])
+    # print_hex(state, "First add round key")
+
+    for round in range(Nr-1, 0, -1):
+        inv_shift_rows(state)
+        # print_hex(state, f"After {round} sub bytes")
+
+        inv_sub_bytes(state)
+        # print_hex(state, f"After {round} shift rows")
+
+        add_round_key(state, round_keys[4*round:4*(round+1)])
+        # print_hex(state, f"After {round} mix columns")
+
+        inv_mix_columns(state)
+        # print_hex(state, f"After {round} add round key")
+
+    inv_shift_rows(state)
+    inv_sub_bytes(state)
+    add_round_key(state, round_keys[:4])
 
 
 def aes(text: str, cypher_type: str, key: list[int]) -> bytearray:
@@ -276,13 +345,23 @@ INV_SBOX = (
 
 if __name__ == "__main__":
     pass
-    # state = bytearray([0x32, 0x88, 0x31, 0xe0,
-    #                    0x43, 0x5a, 0x31, 0x37,
-    #                    0xf6, 0x30, 0x98, 0x07,
-    #                    0xa8, 0x8d, 0xa2, 0x34])
+    state = bytearray([0x32, 0x88, 0x31, 0xe0,
+                       0x43, 0x5a, 0x31, 0x37,
+                       0xf6, 0x30, 0x98, 0x07,
+                       0xa8, 0x8d, 0xa2, 0x34])
 
-    # round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
-    #
+    round_keys = key_expansion([0x2b, 0x7e, 0x15, 0x16, 0x28, 0xae, 0xd2, 0xa6, 0xab, 0xf7, 0x15, 0x88, 0x09, 0xcf, 0x4f, 0x3c], Nr[0], Nk[0])
+
+    print_hex(state, "Before")
+
+    cypher(state, Nr[0], round_keys)
+
+    print_hex(state, "After")
+
+    inv_cypher(state, Nr[0], round_keys)
+
+    print_hex(state, "After")
+
     # for state in input_splitter("Ana are mere moi"):
     #     print_hex(state, "Before")
     #

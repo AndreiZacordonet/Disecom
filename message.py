@@ -20,6 +20,25 @@ def big_power_modulo(number: int, power: int, modulo: int) -> int:
     return result
 
 
+P = int(
+    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
+    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
+    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
+    "E485B576625E7EC6F44C42E9A63A36210000000000090563", 16
+)
+G = 2
+
+
+def create_halfway_key(p: int, g: int, secret: int) -> int:
+    """Half key to be sent to peer"""
+    return big_power_modulo(g, secret, p)
+
+
+def create_key(p: int, secret: int, halfway_key: int) -> int:
+    """Full key using half key from peer"""
+    return big_power_modulo(halfway_key, secret, p)
+
+
 def discover_tailscale_addresses() -> dict[str, str]:
     """
     Discovers all active devices in the Tailscale VPN using the Tailscale CLI.
@@ -48,6 +67,7 @@ def discover_tailscale_addresses() -> dict[str, str]:
 
 
 # TODO: - create file fragmenting-reconstruct method
+#       - handshake msg (key len, public numbers?) using diffie-hellman
 
 
 def pack_text_message(payload: bytearray):

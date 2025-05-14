@@ -1,4 +1,5 @@
 import subprocess
+import secrets
 from enum import Enum, auto
 
 
@@ -20,12 +21,7 @@ def big_power_modulo(number: int, power: int, modulo: int) -> int:
     return result
 
 
-P = int(
-    "FFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD1"
-    "29024E088A67CC74020BBEA63B139B22514A08798E3404DD"
-    "EF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245"
-    "E485B576625E7EC6F44C42E9A63A36210000000000090563", 16
-)
+P = 264092727550922504212002894338628422311
 G = 2
 
 
@@ -34,9 +30,11 @@ def create_halfway_key(p: int, g: int, secret: int) -> int:
     return big_power_modulo(g, secret, p)
 
 
-def create_key(p: int, secret: int, halfway_key: int) -> int:
+def create_key(p: int, secret: int, halfway_key: int) -> list[int]:
     """Full key using half key from peer"""
-    return big_power_modulo(halfway_key, secret, p)
+    shared_key = big_power_modulo(halfway_key, secret, p)
+    key_bytes = shared_key.to_bytes((shared_key.bit_length() + 7) // 8, 'big')
+    return [b for b in key_bytes]
 
 
 def discover_tailscale_addresses() -> dict[str, str]:
@@ -78,8 +76,12 @@ def pack_key_gen_message(public_key: int) -> bytearray:
     return bytearray(f"KEY_GEN\n\r{public_key}".encode())
 
 
-def pack_file_block_message(payload: bytearray, block_number: int, file_size: int) -> bytearray:
-    return bytearray(f"FILE_BLOCK\n\r{block_number}\n\r{file_size}\n\r".encode()) + payload
+def pack_file_block_message(data: tuple[str, bytearray, int, int]) -> bytearray:
+    file_name = data[0]
+    payload = data[1]
+    block_number = data[2]
+    file_size = data[3]
+    return bytearray(f"FILE_BLOCK\n\r{file_name}\n\r{block_number}\n\r{file_size}\n\r".encode()) + payload
 
 
 def unpack_message(message: bytearray) -> dict | None:
@@ -90,9 +92,9 @@ def unpack_message(message: bytearray) -> dict | None:
         case b'TEXT_MSG':
             return {'type': 'TEXT_MSG', 'payload': parts[1]}
         case b'KEY_GEN':
-            return {'type': 'KEY_GEN', 'public_key': int(parts[1])}
+            return {'type': 'KEY_GEN', 'halfway_key': int(parts[1])}
         case b'FILE_BLOCK':
-            return {'type': 'FILE_BLOCK', 'block_number': int(parts[1]), 'file_size': int(parts[2]), 'payload': parts[3]}
+            return {'type': 'FILE_BLOCK', 'file_name': str(parts[1]), 'block_number': int(parts[2]), 'file_size': int(parts[3]), 'payload': parts[4]}
         case _:
             return None
 
@@ -106,36 +108,49 @@ if __name__ == "__main__":
     # for device in devices:
     #     print(f"Host: {device['hostname']}, IPs: {', '.join(device['addresses'])}, Online: {device['online']}")
 
-    def test_message_packing():
-        # Test TEXT_MSG
-        payload = bytearray("Hello, World!".encode())
-        packed_text = pack_text_message(payload)
-        print("Packed TEXT_MSG:", packed_text)
+    # def test_message_packing():
+    #     # Test TEXT_MSG
+    #     payload = bytearray("Hello, World!".encode())
+    #     packed_text = pack_text_message(payload)
+    #     print("Packed TEXT_MSG:", packed_text)
+    #
+    #     unpacked_text = unpack_message(packed_text)
+    #     print("Unpacked TEXT_MSG:", unpacked_text)
+    #
+    #     # Test KEY_GEN
+    #     public_key = 123456789
+    #     packed_key = pack_key_gen_message(public_key)
+    #     print("\nPacked KEY_GEN:", packed_key)
+    #
+    #     unpacked_key = unpack_message(packed_key)
+    #     print("Unpacked KEY_GEN:", unpacked_key)
+    #
+    #     # Test FILE_BLOCK
+    #     file_payload = bytearray(b"Test file data block")
+    #     block_number = 1
+    #     file_size = len(file_payload)
+    #     packed_block = pack_file_block_message(file_payload, block_number, file_size)
+    #     print("\nPacked FILE_BLOCK:", packed_block)
+    #
+    #     unpacked_block = unpack_message(packed_block)
+    #     print("Unpacked FILE_BLOCK:", unpacked_block)
+    #
+    #
+    # # Run the test
+    # test_message_packing()
+    secret_a = secrets.randbits(128)
+    secret_b = secrets.randbits(128)
 
-        unpacked_text = unpack_message(packed_text)
-        print("Unpacked TEXT_MSG:", unpacked_text)
+    halfway_a = create_halfway_key(P, G, secret_a)
+    halfway_b = create_halfway_key(P, G, secret_b)
 
-        # Test KEY_GEN
-        public_key = 123456789
-        packed_key = pack_key_gen_message(public_key)
-        print("\nPacked KEY_GEN:", packed_key)
+    shared_key_a = create_key(P, secret_a, halfway_b)
+    shared_key_b = create_key(P, secret_b, halfway_a)
 
-        unpacked_key = unpack_message(packed_key)
-        print("Unpacked KEY_GEN:", unpacked_key)
+    # key_a_bytes = shared_key_a.to_bytes(16, 'big')
+    # key_b_bytes = shared_key_b.to_bytes(16, 'big')
 
-        # Test FILE_BLOCK
-        file_payload = bytearray(b"Test file data block")
-        block_number = 1
-        file_size = len(file_payload)
-        packed_block = pack_file_block_message(file_payload, block_number, file_size)
-        print("\nPacked FILE_BLOCK:", packed_block)
-
-        unpacked_block = unpack_message(packed_block)
-        print("Unpacked FILE_BLOCK:", unpacked_block)
-
-
-    # Run the test
-    test_message_packing()
-
+    print(f"Key A == Key B? {shared_key_a == shared_key_b}")
+    print(f"Key length: {len(shared_key_a)} bytes\nKey: {shared_key_b}")
 
 

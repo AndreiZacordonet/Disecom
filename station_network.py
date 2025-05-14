@@ -130,18 +130,34 @@ class StationNetwork:
                     self.secrets[hostname] = my_secret
                     halfway_key = create_halfway_key(P, G, my_secret)
                     msg = pack_key_gen_message(halfway_key)
-                    sock.sendall(msg)
+                    # TRIMITE handshake cu prefix de lungime
+                    sock.sendall(len(msg).to_bytes(4, 'big') + msg)
+                    print(f"[DEBUG] Sent KEY_GEN to {hostname}")
                 else:
                     sock.close()
         except Exception as e:
             self.status_callback(hostname, "error", str(e))
             raise
 
+    @staticmethod
+    def recv_exact(sock, size):
+        buf = bytearray()
+        while len(buf) < size:
+            chunk = sock.recv(size - len(buf))
+            if not chunk:
+                raise ConnectionError("Socket closed")
+            buf.extend(chunk)
+        return buf
+
     def receive_messages(self, sock, hostname):
         """Receive messages from a specific connection"""
         while True:
             try:
-                data = sock.recv(4096)
+                # data = sock.recv(4096)
+
+                length_bytes = sock.recv(4)
+                length = int.from_bytes(length_bytes, 'big')
+                data = self.recv_exact(sock, length)
                 if not data:
                     break
                 msg = unpack_message(data)
@@ -150,6 +166,7 @@ class StationNetwork:
                     continue
                 msg_type = msg.get('type')
                 if msg_type == 'KEY_GEN':
+                    print(f"[DEBUG] Received KEY_GEN from {hostname}")
                     # Peer-ul trimite cheia halfway
                     halfway_key = msg['halfway_key']
                     # Folosește secretul propriu pentru acest hostname
@@ -159,10 +176,13 @@ class StationNetwork:
                         # Trimite și tu cheia ta halfway dacă nu ai trimis deja
                         my_halfway = create_halfway_key(P, G, self.secrets[hostname])
                         reply = pack_key_gen_message(my_halfway)
-                        sock.sendall(reply)
+                        # Trimite handshake cu lungime
+                        sock.sendall(len(reply).to_bytes(4, 'big') + reply)
+                        print(f"[DEBUG] Sent KEY_GEN to {hostname} (in response)")
                     shared_key = create_key(P, self.secrets[hostname], halfway_key)
                     self.shared_keys[hostname] = shared_key
-                    print(f"[INFO] Shared key established with {hostname}")
+                    print(f"[INFO] Shared key established with {hostname} (handshake OK)")
+                    print(f"[DEBUG] shared_keys: {self.shared_keys}")
                 elif msg_type == 'TEXT_MSG':
                     if hostname not in self.shared_keys:
                         print(f"[WARN] No shared key with {hostname}. Cannot decrypt message.")
@@ -175,8 +195,9 @@ class StationNetwork:
                     except Exception as e:
                         print(f"Decrypt error from {hostname}: {e}")
                 elif msg_type == 'FILE_BLOCK':
+                    print(f'{msg=}')
                     # Procesare bloc fișier
-                    fname = msg['file_name']
+                    fname = msg['file_name'][12:-2]      # get rid of byte representation
                     block_number = msg['block_number']
                     file_size = msg['file_size']
                     payload = msg['payload']
@@ -185,6 +206,7 @@ class StationNetwork:
                         continue
                     shared_key = self.shared_keys[hostname]
                     try:
+                        print(f'{len(bytearray(payload))=}, {len(payload)=}')
                         decrypted_data = aes(bytearray(payload), cypher_type="aes_128", key=shared_key, decrypt=True)
                     except Exception as e:
                         print(f"File block decrypt error: {e}")
@@ -201,9 +223,9 @@ class StationNetwork:
                     total_blocks = (file_size + 4095) // 4096
                     if len(blocks) == total_blocks:
                         # Reconstruiește fișierul
-                        with open(fname, 'wb') as f:
+                        with open(fname, 'w') as f:
                             for i in range(total_blocks):
-                                f.write(blocks[i])
+                                f.write(blocks[i][2:-1])
                         print(f"[INFO] File '{fname}' received and reconstructed from {hostname}!")
                         self.message_callback(hostname, f"[File received: {fname}]")
                         del self.file_buffers[hostname][fname]
@@ -237,7 +259,8 @@ class StationNetwork:
                 sock, _ = self.connections[hostname]
                 if msg_type == 'KEY_GEN':
                     msg = pack_key_gen_message(message)
-                    sock.sendall(msg)
+                    # FIXME: if not good remove len
+                    sock.sendall(len(msg).to_bytes(4, 'big') + msg)
                     return True
                 elif msg_type == 'TEXT_MSG':
                     if hostname not in self.shared_keys:
@@ -246,7 +269,8 @@ class StationNetwork:
                     shared_key = self.shared_keys[hostname]
                     encrypted = aes(str(message), cypher_type="aes_128", key=shared_key)
                     msg = pack_text_message(encrypted)
-                    sock.sendall(msg)
+                    # FIXME: if not good remove len
+                    sock.sendall(len(msg).to_bytes(4, 'big') + msg)
                     return True
                 elif msg_type == 'FILE_BLOCK':
                     # message = (filename, payload_bytes, block_number, file_size)
@@ -256,8 +280,10 @@ class StationNetwork:
                         return False
                     shared_key = self.shared_keys[hostname]
                     encrypted = aes(str(payload), cypher_type="aes_128", key=shared_key)
+                    print(f'{encrypted=}, {len(encrypted)=}')
                     msg = pack_file_block_message((fname, encrypted, block_number, file_size))
-                    sock.sendall(msg)
+                    # FIXME: if not good remove len
+                    sock.sendall(len(msg).to_bytes(4, 'big') + msg)
                     return True
                 else:
                     print(f"[WARN] Unknown message type for send: {msg_type}")

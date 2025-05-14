@@ -78,11 +78,11 @@ class StationGUI:
         self.msg_entry.bind("<Return>", lambda e: self.send_message())
 
         # Send button
-        self.send_btn = ttk.Button(input_frame, text="Send", command=self.send_message)
+        self.send_btn = ttk.Button(input_frame, text="Send", command=self.send_message, state=tk.DISABLED)
         self.send_btn.pack(side=tk.RIGHT)
 
         # File send button
-        self.file_btn = ttk.Button(input_frame, text="Send File", command=self.send_file)
+        self.file_btn = ttk.Button(input_frame, text="Send File", command=self.send_file, state=tk.DISABLED)
         self.file_btn.pack(side=tk.RIGHT, padx=(0, 5))
 
         # Status bar
@@ -93,7 +93,6 @@ class StationGUI:
 
     def on_message_received(self, hostname, message):
         """Callback for when a message is received"""
-        # Dacă mesajul e notificare de fișier primit, îl afișăm diferit
         if isinstance(message, str) and message.startswith('[File received:'):
             self.add_message(f"[{hostname}] {message}")
         else:
@@ -107,6 +106,10 @@ class StationGUI:
                 self.peers_list.item(hostname, text=f"{hostname} (Connected)")
             except:
                 pass
+            if hostname == self.selected_peer:
+                self.peer_label.config(text=f"Chatting with: {hostname} (Connected)")
+                self.send_btn.config(state=tk.NORMAL)
+                self.file_btn.config(state=tk.NORMAL)
         elif status == "disconnected":
             self.add_message(f"Disconnected from {hostname}")
             try:
@@ -115,13 +118,19 @@ class StationGUI:
                 pass
             if hostname == self.selected_peer:
                 self.peer_label.config(text=f"Disconnected from {hostname}")
+                self.send_btn.config(state=tk.DISABLED)
+                self.file_btn.config(state=tk.DISABLED)
         elif status == "error":
             if error_message:
                 self.add_message(f"Error with {hostname}: {error_message}")
+            if hostname == self.selected_peer:
+                self.send_btn.config(state=tk.DISABLED)
+                self.file_btn.config(state=tk.DISABLED)
 
     def update_peers(self):
         """Update the list of available Tailscale peers"""
         try:
+            import socket
             peers = discover_tailscale_addresses()
             
             # Clear current list
@@ -139,26 +148,28 @@ class StationGUI:
     def on_peer_selected(self, event):
         """Handle peer selection from the list"""
         selection = self.peers_list.selection()
-        if selection:
-            hostname = selection[0]
-            self.selected_peer = hostname
-            
-            if hostname in self.network.get_connected_peers():
-                status = "Connected"
-            else:
-                status = "Not connected"
-                self.connect_to_peer(hostname)
-            
-            self.peer_label.config(text=f"Chatting with: {hostname} ({status})")
-    
+        if not selection:
+            self.selected_peer = None
+            self.peer_label.config(text="Select a peer to start chatting")
+            self.send_btn.config(state=tk.DISABLED)
+            self.file_btn.config(state=tk.DISABLED)
+            return
+        hostname = selection[0]
+        self.selected_peer = hostname
+        self.peer_label.config(text=f"Chatting with: {hostname}")
+        # Connect if not connected
+        if not self.network.is_connected(hostname):
+            self.network.connect_to_peer(hostname)
+        # Activate buttons after selecting peer
+        self.send_btn.config(state=tk.NORMAL)
+        self.file_btn.config(state=tk.NORMAL)
+
     def connect_to_peer(self, hostname):
         """Connect to another peer using Tailscale"""
         try:
             self.network.connect_to_peer(hostname)
         except Exception as e:
             messagebox.showerror("Error", str(e))
-
-
 
     def send_message(self):
         """Send message to selected peer"""

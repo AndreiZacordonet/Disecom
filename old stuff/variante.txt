@@ -1,0 +1,252 @@
+import tkinter as tk
+from tkinter import ttk, scrolledtext, messagebox
+import socket
+import threading
+from rejndael import aes, TEST_KEYS
+import json
+import os
+from tailscale import discover_tailscale_addresses
+
+class StationGUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Secure Station Communication")
+        self.root.geometry("1000x700")
+        
+        # Network variables
+        self.connections = {}  # {hostname: (socket, address)}
+        self.listen_socket = None
+        self.lock = threading.Lock()
+        self.selected_peer = None
+        
+        # Create and set up the GUI
+        self.setup_gui()
+        
+        # Start listening thread
+        self.start_listening()
+        
+        # Start Tailscale discovery
+        self.update_peers()
+
+    def setup_gui(self):
+        # Main container
+        main_container = ttk.PanedWindow(self.root, orient=tk.HORIZONTAL)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Left panel for peers
+        left_panel = ttk.Frame(main_container)
+        main_container.add(left_panel, weight=1)
+        
+        # Peers list
+        ttk.Label(left_panel, text="Online Peers").pack(pady=5)
+        self.peers_list = ttk.Treeview(left_panel, selectmode='browse', show='tree')
+        self.peers_list.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.peers_list.bind('<<TreeviewSelect>>', self.on_peer_selected)
+        
+        # Refresh button
+        ttk.Button(left_panel, text="Refresh Peers", command=self.update_peers).pack(pady=5)
+        
+        # Right panel for chat
+        right_panel = ttk.Frame(main_container)
+        main_container.add(right_panel, weight=3)
+
+        # My address display
+        addr_frame = ttk.Frame(right_panel)
+        addr_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Label(addr_frame, text="My Address:").pack(side=tk.LEFT)
+        self.my_address = ttk.Label(addr_frame, text="Not listening")
+        self.my_address.pack(side=tk.LEFT, padx=5)
+        
+        # Selected peer display
+        self.peer_label = ttk.Label(right_panel, text="Select a peer to start chatting")
+        self.peer_label.pack(pady=5)
+
+        # Chat display
+        self.chat_display = scrolledtext.ScrolledText(right_panel, wrap=tk.WORD, height=20)
+        self.chat_display.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.chat_display.config(state=tk.DISABLED)
+
+        # Message input frame
+        input_frame = ttk.Frame(right_panel)
+        input_frame.pack(fill=tk.X, padx=5, pady=5)
+
+        # Message input
+        self.msg_entry = ttk.Entry(input_frame)
+        self.msg_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 5))
+        self.msg_entry.bind("<Return>", lambda e: self.send_message())
+
+        # Send button
+        self.send_btn = ttk.Button(input_frame, text="Send", command=self.send_message)
+        self.send_btn.pack(side=tk.RIGHT)
+
+        # Status bar
+        self.status_var = tk.StringVar()
+        self.status_var.set("Ready")
+        self.status_bar = ttk.Label(self.root, textvariable=self.status_var, relief=tk.SUNKEN)
+        self.status_bar.pack(fill=tk.X, padx=5, pady=5)
+
+    def start_listening(self):
+        """Start listening for incoming connections"""
+        try:
+            self.listen_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.listen_socket.bind(('', 0))  # Bind to random available port
+            self.listen_socket.listen(5)
+            
+            # Update my address display
+            host = socket.gethostbyname(socket.gethostname())
+            port = self.listen_socket.getsockname()[1]
+            self.my_address.config(text=f"{host}:{port}")
+            
+            # Start listener thread
+            threading.Thread(target=self.accept_connections, daemon=True).start()
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not start listening: {str(e)}")
+
+    def accept_connections(self):
+        """Accept incoming connections"""
+        while True:
+            try:
+                client_socket, address = self.listen_socket.accept()
+                with self.lock:
+                    self.connections[address] = client_socket
+                self.add_message(f"New connection from {address[0]}:{address[1]}")
+                
+                # Start a thread to receive messages from this client
+                threading.Thread(target=self.receive_messages, 
+                               args=(client_socket, address), 
+                               daemon=True).start()
+            except:
+                break
+
+    def update_peers(self):
+        """Update the list of available Tailscale peers"""
+        try:
+            peers = discover_tailscale_addresses()
+            
+            # Clear current list
+            self.peers_list.delete(*self.peers_list.get_children())
+            
+            # Add peers to the list
+            for hostname, ip in peers.items():
+                status = "Connected" if hostname in self.connections else "Available"
+                self.peers_list.insert('', 'end', hostname, text=f"{hostname} ({status})")
+                
+        except Exception as e:
+            self.status_var.set(f"Error updating peers: {str(e)}")
+    
+    def on_peer_selected(self, event):
+        """Handle peer selection from the list"""
+        selection = self.peers_list.selection()
+        if selection:
+            hostname = selection[0]
+            self.selected_peer = hostname
+            
+            if hostname in self.connections:
+                status = "Connected"
+            else:
+                status = "Not connected"
+                self.connect_to_peer(hostname)
+            
+            self.peer_label.config(text=f"Chatting with: {hostname} ({status})")
+    
+    def connect_to_peer(self, hostname):
+        """Connect to another peer using Tailscale"""
+        try:
+            peers = discover_tailscale_addresses()
+            if hostname not in peers:
+                raise Exception("Peer not found in Tailscale network")
+                
+            ip = peers[hostname]
+            port = 5000  # Using a fixed port for simplicity
+            
+            # Create new socket and connect
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect((ip, port))
+            
+            with self.lock:
+                self.connections[hostname] = (sock, (ip, port))
+            
+            self.add_message(f"Connected to {hostname}")
+            
+            # Start receiving thread for this connection
+            threading.Thread(target=self.receive_messages, 
+                           args=(sock, hostname), 
+                           daemon=True).start()
+            
+            # Update peer status in the list
+            self.peers_list.item(hostname, text=f"{hostname} (Connected)")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not connect to {hostname}: {str(e)}")
+
+    def receive_messages(self, sock, hostname):
+        """Receive messages from a specific connection"""
+        while True:
+            try:
+                data = sock.recv(1024)
+                if not data:
+                    break
+                
+                # Decrypt the message
+                decrypted_msg = aes(bytearray(data), 
+                                  cypher_type="aes_128", 
+                                  key=TEST_KEYS["aes_128"][0], 
+                                  decrypt=True)
+                
+                self.add_message(f"[{hostname}] {decrypted_msg}")
+            except:
+                break
+        
+        # Connection lost
+        with self.lock:
+            if hostname in self.connections:
+                del self.connections[hostname]
+                self.peers_list.item(hostname, text=f"{hostname} (Available)")
+        self.add_message(f"Connection with {hostname} closed")
+
+    def send_message(self):
+        """Send message to selected peer"""
+        message = self.msg_entry.get()
+        if not message or not self.selected_peer or self.selected_peer not in self.connections:
+            return
+        
+        # Encrypt the message
+        encrypted_msg = aes(message, 
+                          cypher_type="aes_128", 
+                          key=TEST_KEYS["aes_128"][0])
+        
+        # Send to selected peer
+        try:
+            sock, _ = self.connections[self.selected_peer]
+            sock.sendall(encrypted_msg)
+            # Add own message to chat
+            self.add_message(f"[Me] {message}")
+        except:
+            # Connection failed
+            with self.lock:
+                if self.selected_peer in self.connections:
+                    del self.connections[self.selected_peer]
+                    self.peers_list.item(self.selected_peer, 
+                                       text=f"{self.selected_peer} (Available)")
+            self.add_message(f"Lost connection to {self.selected_peer}")
+        
+        # Clear message input
+        self.msg_entry.delete(0, tk.END)
+
+    def add_message(self, message):
+        """Add a message to the chat display"""
+        def _add():
+            self.chat_display.config(state=tk.NORMAL)
+            self.chat_display.insert(tk.END, message + "\n")
+            self.chat_display.see(tk.END)
+            self.chat_display.config(state=tk.DISABLED)
+        self.root.after(0, _add)
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    app = StationGUI(root)
+    root.mainloop()
+
+------------------------------------------------------------------------------------------------
+

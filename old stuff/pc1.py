@@ -1,7 +1,8 @@
 import socket
 import threading
 
-SERVER_IP = "100.92.71.62"
+# 100.102.137.18 - zaco
+SERVER_IP = "100.81.251.117"
 PORT = 5000
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)

@@ -63,18 +63,11 @@ def discover_tailscale_addresses() -> dict[str, str]:
 
     return user_data
 
-
-# TODO: - create file fragmenting-reconstruct method
-#       - handshake msg (key len, public numbers?) using diffie-hellman
-
-
 def pack_text_message(payload: bytearray):
     return bytearray("TEXT_MSG\n\r".encode()) + payload
 
-
 def pack_key_gen_message(public_key: int) -> bytearray:
     return bytearray(f"KEY_GEN\n\r{public_key}".encode())
-
 
 def pack_file_block_message(data: tuple[str, bytearray, int, int]) -> bytearray:
     file_name = data[0]
@@ -82,7 +75,6 @@ def pack_file_block_message(data: tuple[str, bytearray, int, int]) -> bytearray:
     block_number = data[2]
     file_size = data[3]
     return bytearray(f"FILE_BLOCK\n\r{file_name}\n\r{block_number}\n\r{file_size}\n\r".encode()) + payload
-
 
 def unpack_message(message: bytearray) -> dict | None:
 
@@ -97,7 +89,6 @@ def unpack_message(message: bytearray) -> dict | None:
             return {'type': 'FILE_BLOCK', 'file_name': str(parts[1]), 'block_number': int(parts[2]), 'file_size': int(parts[3]), 'payload': parts[4]}
         case _:
             return None
-
 
 if __name__ == "__main__":
     # print(big_power_modulo(512345000000000000000000000000000000000000000000000000000000, 1000000000000001, 23))

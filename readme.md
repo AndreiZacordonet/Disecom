@@ -1,6 +1,6 @@
 
 # DISECOM – DIStributed SECure COMmunication  
-**By Zacordoneț Andrei & Zaharia Teodor-Ștefan**
+**By [Andrei Zacordoneț](https://github.com/AndreiZacordonet) & [Teodor-Ștefan Zaharia](https://github.com/ZhTeodorStefan)**
 
 ## Description
 
